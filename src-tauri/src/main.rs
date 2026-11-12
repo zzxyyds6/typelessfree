@@ -70,10 +70,12 @@ fn get_settings(app: AppHandle) -> serde_json::Value {
 fn save_settings(app: AppHandle, settings: serde_json::Value) -> Result<(), String> {
     config::validate(&settings)?;
     let new_hotkey = HotKey::new(
-        config::parse_modifiers(
-            settings.get("hotkeyModifiers").and_then(|v| v.as_str()).unwrap_or("control+shift"),
-        )
-        .ok_or_else(|| "不支持的修饰键".to_string())?,
+        Some(
+            config::parse_modifiers(
+                settings.get("hotkeyModifiers").and_then(|v| v.as_str()).unwrap_or("control+shift"),
+            )
+            .ok_or_else(|| "不支持的修饰键".to_string())?,
+        ),
         config::parse_key(
             settings.get("hotkeyKey").and_then(|v| v.as_str()).unwrap_or("space"),
         )
@@ -315,7 +317,7 @@ fn main() {
                             .0
                             .lock()
                             .expect("热键状态锁获取失败");
-                        (*g.0, g.1)
+                        (g.0.clone(), g.1)
                     };
                     if event.id != current_hotkey.id() {
                         continue;
