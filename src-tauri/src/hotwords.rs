@@ -10,7 +10,7 @@
 /// 把热词列表拼成 whisper initial_prompt。
 /// 列表为空时返回空字符串（不设置 prompt）。
 pub fn build_initial_prompt(hotwords: &[String]) -> String {
-    let words: Vec<&String> = hotwords
+    let words: Vec<&str> = hotwords
         .iter()
         .map(|w| w.trim())
         .filter(|w| !w.is_empty())
