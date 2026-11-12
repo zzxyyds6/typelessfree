@@ -1,5 +1,6 @@
 mod audio;
 mod cleanup;
+mod hotwords;
 mod config;
 mod insert;
 mod model;
@@ -24,6 +25,18 @@ struct RecordingState(AtomicBool);
 /// 音频服务持有者，供热键线程访问。
 struct AudioHolder {
     audio: AudioHandle,
+}
+
+/// Tauri 命令：从配置目录的 hotwords.json 导入热词词典。
+#[tauri::command]
+fn import_hotwords(app: AppHandle) -> Result<usize, String> {
+    hotwords::import_from_file(&app)
+}
+
+/// Tauri 命令：导出热词词典到配置目录的 hotwords.json。
+#[tauri::command]
+fn export_hotwords(app: AppHandle) -> Result<usize, String> {
+    hotwords::export_to_file(&app)
 }
 
 /// 在鼠标光标附近显示浮动预览卡（不抢焦点）。
@@ -81,9 +94,11 @@ fn start_recording(handle: &AppHandle, holder: &AudioHolder, state: &RecordingSt
                 let cfg: HotkeyConfig = config::load(&h_partial);
                 let model_path = model::resolve_model_path(&h_partial, &cfg.model);
                 // partial 失败静默忽略（比如模型还在下载），不干扰用户
-                if let Ok(text) = transcribe::transcribe(&h_partial, &snap.samples, &cfg.language, &model_path) {
+                let prompt = hotwords::build_initial_prompt(&cfg.hotwords);
+                if let Ok(text) = transcribe::transcribe(&h_partial, &snap.samples, &cfg.language, &prompt, &model_path) {
                     if !text.is_empty() {
-                        let _ = h_partial.emit("partial-result", serde_json::json!({ "text": text }));
+                        let fixed = hotwords::correct(&text, &cfg.hotwords);
+                        let _ = h_partial.emit("partial-result", serde_json::json!({ "text": fixed }));
                     }
                 }
             });
@@ -112,8 +127,11 @@ fn stop_and_transcribe(handle: &AppHandle, holder: &AudioHolder, state: &Recordi
     std::thread::spawn(move || {
         let cfg: HotkeyConfig = config::load(&handle);
         let model_path = model::resolve_model_path(&handle, &cfg.model);
-        match transcribe::transcribe(&handle, &samples, &cfg.language, &model_path) {
+        let prompt = hotwords::build_initial_prompt(&cfg.hotwords);
+        match transcribe::transcribe(&handle, &samples, &cfg.language, &prompt, &model_path) {
             Ok(text) => {
+                // 热词后处理修正（在 AI 清理之前，保证词典词形优先）
+                let text = hotwords::correct(&text, &cfg.hotwords);
                 // 可选 AI 清理（默认关闭；关闭时文本不出本机）
                 let text = if text.is_empty() {
                     text
@@ -242,6 +260,7 @@ fn main() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![import_hotwords, export_hotwords])
         .on_window_event(|window, event| {
             // 关闭窗口=隐藏到托盘，不退出应用
             if let WindowEvent::CloseRequested { api, .. } = event {

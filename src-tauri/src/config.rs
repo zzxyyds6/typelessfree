@@ -20,6 +20,9 @@ struct ConfigFile {
     /// "auto" = 自动检测，或 "zh" / "en" 等语言代码
     language: Option<String>,
     cleanup: Option<CleanupConfig>,
+    /// 个人词典 / 热词列表
+    #[serde(default)]
+    hotwords: Option<Vec<String>>,
 }
 
 /// AI 清理配置。默认关闭：关闭时文本绝不出本机。
@@ -70,6 +73,8 @@ pub struct HotkeyConfig {
     pub model: String,
     pub language: String,
     pub cleanup: CleanupConfig,
+    /// 个人词典 / 热词（识别 prompt 注入 + 结果后处理修正）
+    pub hotwords: Vec<String>,
 }
 
 impl Default for HotkeyConfig {
@@ -82,6 +87,7 @@ impl Default for HotkeyConfig {
             model: "base".to_string(),
             language: "auto".to_string(),
             cleanup: CleanupConfig::default(),
+            hotwords: Vec::new(),
         }
     }
 }
@@ -153,6 +159,9 @@ pub fn load(app: &tauri::AppHandle) -> HotkeyConfig {
     }
     if let Some(l) = file.language {
         cfg.language = l;
+    }
+    if let Some(h) = file.hotwords {
+        cfg.hotwords = h.into_iter().filter(|w| !w.trim().is_empty()).collect();
     }
     if let Some(c) = file.cleanup {
         cfg.cleanup.enabled = c.enabled;

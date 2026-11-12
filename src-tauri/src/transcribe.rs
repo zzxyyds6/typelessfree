@@ -22,10 +22,12 @@ pub fn resample_to_16k(samples: &[f32], from_rate: u32) -> Vec<f32> {
 
 /// 运行 whisper 推理，返回识别文本。
 /// language 为 "auto"/空时启用 whisper 自动语言检测。
+/// initial_prompt 非空时注入识别提示（用于热词引导，见 hotwords::build_initial_prompt）。
 pub fn transcribe(
     app: &AppHandle,
     samples: &[f32],
     language: &str,
+    initial_prompt: &str,
     model_path: &std::path::Path,
 ) -> Result<String, String> {
     if samples.len() < 1600 {
@@ -54,6 +56,9 @@ pub fn transcribe(
     let _ = params.set_language(if auto_detect { None } else { Some(language) });
     params.set_no_context(true);
     params.set_suppress_blank(true);
+    if !initial_prompt.is_empty() {
+        params.set_initial_prompt(initial_prompt);
+    }
 
     let mut state = ctx.create_state().map_err(|e| format!("创建推理状态失败: {e}"))?;
     state.full(params, samples).map_err(|e| format!("识别失败: {e}"))?;
