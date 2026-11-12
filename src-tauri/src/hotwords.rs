@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn 解析_JSON 数组词典() {
+    fn 解析_JSON数组词典() {
         let v = parse_dict("[\"张三\", \"Kubernetes\"]").unwrap();
         assert_eq!(v, vec!["张三".to_string(), "Kubernetes".to_string()]);
     }
