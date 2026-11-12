@@ -93,7 +93,7 @@ impl Default for HotkeyConfig {
 }
 
 /// 解析修饰键字符串，如 "control+shift"、"alt+super"。
-fn parse_modifiers(s: &str) -> Option<global_hotkey::hotkey::Modifiers> {
+pub fn parse_modifiers(s: &str) -> Option<global_hotkey::hotkey::Modifiers> {
     let mut mods = global_hotkey::hotkey::Modifiers::empty();
     for part in s.split('+') {
         let m = match part.trim().to_ascii_lowercase().as_str() {
@@ -109,7 +109,7 @@ fn parse_modifiers(s: &str) -> Option<global_hotkey::hotkey::Modifiers> {
 }
 
 /// 解析主键。MVP 支持常用键，后续在设置界面扩展。
-fn parse_key(s: &str) -> Option<global_hotkey::hotkey::Code> {
+pub fn parse_key(s: &str) -> Option<global_hotkey::hotkey::Code> {
     use global_hotkey::hotkey::Code;
     let k = s.trim().to_ascii_lowercase();
     Some(match k.as_str() {
@@ -179,4 +179,100 @@ pub fn load(app: &tauri::AppHandle) -> HotkeyConfig {
         }
     }
     cfg
+}
+/// 把修饰键位标志转回配置字符串（如 "control+shift"）。
+pub fn modifiers_to_string(m: global_hotkey::hotkey::Modifiers) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if m.contains(global_hotkey::hotkey::Modifiers::CONTROL) {
+        parts.push("control");
+    }
+    if m.contains(global_hotkey::hotkey::Modifiers::SHIFT) {
+        parts.push("shift");
+    }
+    if m.contains(global_hotkey::hotkey::Modifiers::ALT) {
+        parts.push("alt");
+    }
+    if m.contains(global_hotkey::hotkey::Modifiers::META) {
+        parts.push("super");
+    }
+    if parts.is_empty() {
+        parts.push("none");
+    }
+    parts.join("+")
+}
+
+/// 把主键转回配置字符串。
+pub fn key_to_string(code: global_hotkey::hotkey::Code) -> String {
+    use global_hotkey::hotkey::Code;
+    match code {
+        Code::Space => "space".to_string(),
+        Code::KeyQ => "q".to_string(),
+        Code::KeyZ => "z".to_string(),
+        Code::KeyD => "d".to_string(),
+        Code::KeyV => "v".to_string(),
+        Code::F1 => "f1".to_string(),
+        Code::F2 => "f2".to_string(),
+        Code::F3 => "f3".to_string(),
+        Code::F4 => "f4".to_string(),
+        _ => "space".to_string(),
+    }
+}
+
+/// 校验设置界面提交的配置（camelCase 字段），不合法时返回错误说明。
+pub fn validate(settings: &serde_json::Value) -> Result<(), String> {
+    let file: ConfigFile = serde_json::from_value(settings.clone())
+        .map_err(|e| format!("配置格式错误: {e}"))?;
+    if let Some(m) = &file.hotkey_modifiers {
+        if parse_modifiers(m).is_none() {
+            return Err(format!("不支持的修饰键：{m}（可选 control/shift/alt/super）"));
+        }
+    }
+    if let Some(k) = &file.hotkey_key {
+        if parse_key(k).is_none() {
+            return Err(format!("不支持的主键：{k}（可选 space/q/z/d/v/f1-f4）"));
+        }
+    }
+    if let Some(mode) = file.mode.as_deref() {
+        if mode != "hold" && mode != "toggle" {
+            return Err(format!("不支持的触发模式：{mode}（可选 hold/toggle）"));
+        }
+    }
+    if let Some(model) = &file.model {
+        if model.trim().is_empty() {
+            return Err("模型名不能为空".to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 保存设置到 config.json。校验 + 规范化热词后整体写入，保留未提交字段。
+pub fn save(app: &tauri::AppHandle, settings: &serde_json::Value) -> Result<(), String> {
+    validate(settings)?;
+    let mut out = settings.clone();
+    // 规范化热词：去首尾空白、去空行、大小写不敏感去重
+    if let Some(arr) = out.get_mut("hotwords") {
+        if let Some(list) = arr.as_array_mut() {
+            let mut seen: Vec<String> = Vec::new();
+            let mut cleaned: Vec<serde_json::Value> = Vec::new();
+            for item in list {
+                if let Some(w) = item.as_str() {
+                    let w = w.trim().to_string();
+                    if w.is_empty() || seen.iter().any(|e| e.eq_ignore_ascii_case(&w)) {
+                        continue;
+                    }
+                    seen.push(w.clone());
+                    cleaned.push(serde_json::Value::String(w));
+                }
+            }
+            *arr = serde_json::Value::Array(cleaned);
+        }
+    }
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "无法获取配置目录".to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败: {e}"))?;
+    let text = serde_json::to_string_pretty(&out).map_err(|e| format!("序列化配置失败: {e}"))?;
+    std::fs::write(dir.join("config.json"), text).map_err(|e| format!("写入配置失败: {e}"))?;
+    Ok(())
 }

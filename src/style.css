@@ -65,3 +65,130 @@ body:not(:has(.preview-card)) {
 }
 
 pre { font-size: 13px; line-height: 1.6; }
+/* ---------- 设置界面 ---------- */
+body:not(:has(.preview-card)) {
+  background: #18181b;
+  color: #e4e4e7;
+}
+
+#app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+}
+
+#app h1 {
+  font-size: 20px;
+  margin-bottom: 16px;
+  color: #fafafa;
+}
+
+.settings h2 {
+  font-size: 14px;
+  color: #a1a1aa;
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #27272a;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.label {
+  flex: 0 0 72px;
+  font-size: 13px;
+  color: #d4d4d8;
+  padding-top: 6px;
+}
+
+.check {
+  font-size: 13px;
+  color: #d4d4d8;
+  margin-right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+input[type="text"],
+input[type="password"],
+select,
+textarea {
+  flex: 1;
+  background: #27272a;
+  color: #e4e4e7;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #6366f1;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+button {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button:hover { background: #4f46e5; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.secondary {
+  background: #3f3f46;
+}
+button.secondary:hover { background: #52525b; }
+
+.save-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 8px;
+}
+
+#save-tip {
+  font-size: 13px;
+}
+
+.status-area {
+  margin-top: 16px;
+  border-top: 1px solid #27272a;
+  padding-top: 12px;
+}
+
+.status-area #result {
+  font-size: 13px;
+  color: #a1a1aa;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.status-area p {
+  font-size: 13px;
+}
+
+.muted {
+  color: #71717a;
+  font-size: 12px;
+}

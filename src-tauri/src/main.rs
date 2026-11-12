@@ -26,6 +26,12 @@ struct AudioHolder {
     audio: AudioHandle,
 }
 
+/// 全局热键管理器与当前热键（保存设置时支持运行时重注册）。
+struct HotkeyHolder(std::sync::Mutex<(GlobalHotKeyManager, HotKey)>);
+
+/// 事件线程读取的当前热键与触发模式（与 HotkeyHolder 保持一致）。
+struct HotkeyState(std::sync::Mutex<(HotKey, TriggerMode)>);
+
 /// Tauri 命令：从配置目录的 hotwords.json 导入热词词典。
 #[tauri::command]
 fn import_hotwords(app: AppHandle) -> Result<usize, String> {
@@ -36,6 +42,81 @@ fn import_hotwords(app: AppHandle) -> Result<usize, String> {
 #[tauri::command]
 fn export_hotwords(app: AppHandle) -> Result<usize, String> {
     hotwords::export_to_file(&app)
+}
+
+/// Tauri 命令：读取当前设置（camelCase，供设置界面填充表单）。
+#[tauri::command]
+fn get_settings(app: AppHandle) -> serde_json::Value {
+    let cfg: HotkeyConfig = config::load(&app);
+    serde_json::json!({
+        "hotkeyModifiers": config::modifiers_to_string(cfg.modifiers),
+        "hotkeyKey": config::key_to_string(cfg.code),
+        "mode": cfg.mode.as_str(),
+        "model": cfg.model,
+        "language": cfg.language,
+        "cleanup": {
+            "enabled": cfg.cleanup.enabled,
+            "endpoint": cfg.cleanup.endpoint,
+            "model": cfg.cleanup.model,
+            "apiKey": cfg.cleanup.api_key,
+            "prompt": cfg.cleanup.prompt,
+        },
+        "hotwords": cfg.hotwords,
+    })
+}
+
+/// Tauri 命令：保存设置并即时生效（重注册全局热键、更新托盘提示）。
+#[tauri::command]
+fn save_settings(app: AppHandle, settings: serde_json::Value) -> Result<(), String> {
+    config::validate(&settings)?;
+    let new_hotkey = HotKey::new(
+        config::parse_modifiers(
+            settings.get("hotkeyModifiers").and_then(|v| v.as_str()).unwrap_or("control+shift"),
+        )
+        .ok_or_else(|| "不支持的修饰键".to_string())?,
+        config::parse_key(
+            settings.get("hotkeyKey").and_then(|v| v.as_str()).unwrap_or("space"),
+        )
+        .ok_or_else(|| "不支持的主键".to_string())?,
+    );
+
+    // 先尝试重注册（失败时恢复旧热键，不打断现有使用）
+    {
+        let holder = app.state::<HotkeyHolder>();
+        let mut guard = holder
+            .0
+            .lock()
+            .map_err(|_| "热键状态锁获取失败".to_string())?;
+        let old = guard.1;
+        let _ = guard.0.unregister(old);
+        if let Err(e) = guard.0.register(new_hotkey) {
+            let _ = guard.0.register(old);
+            return Err(format!("全局热键注册失败：可能已被其他程序占用：{e}"));
+        }
+        guard.1 = new_hotkey;
+    }
+
+    // 写配置文件
+    config::save(&app, &settings)?;
+
+    // 同步事件线程使用的当前热键与触发模式
+    let mode_str = settings
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("hold");
+    let new_mode = if mode_str == "toggle" { TriggerMode::Toggle } else { TriggerMode::Hold };
+    {
+        let st = app.state::<HotkeyState>();
+        let mut g = st.0.lock().map_err(|_| "热键状态锁获取失败".to_string())?;
+        *g = (new_hotkey, new_mode);
+    }
+
+    // 更新托盘提示
+    let label = if mode_str == "toggle" { "切换模式" } else { "按住说话" };
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let _ = tray.set_tooltip(Some(format!("typelessfree（{label}）")));
+    }
+    Ok(())
 }
 
 /// 在鼠标光标附近显示浮动预览卡（不抢焦点）。
@@ -182,14 +263,14 @@ fn main() {
             let cfg: HotkeyConfig = config::load(&handle);
             let mode = cfg.mode;
 
-            // ---- 注册全局热键 ----
+            // ---- 注册全局热键（manager 托管，支持设置界面重注册） ----
             let manager = GlobalHotKeyManager::new().expect("无法创建全局热键管理器");
             let hotkey = HotKey::new(Some(cfg.modifiers), cfg.code);
             manager
                 .register(hotkey)
                 .expect("全局热键注册失败：快捷键可能已被其他程序占用");
-            // manager 需要存活到进程结束；放进程级静态生命周期
-            std::mem::forget(manager);
+            app.manage(HotkeyHolder(std::sync::Mutex::new((manager, hotkey))));
+            app.manage(HotkeyState(std::sync::Mutex::new((hotkey, mode))));
 
             // ---- 共享状态 ----
             app.manage(AudioHolder {
@@ -225,17 +306,24 @@ fn main() {
                 .build(app)?;
 
             // ---- 热键事件线程：驱动录音与识别 ----
-            let hotkey_thread = hotkey;
             let handle_thread = handle.clone();
             std::thread::spawn(move || {
                 for event in GlobalHotKeyEvent::receiver() {
-                    if event.id != hotkey_thread.id() {
+                    let (current_hotkey, current_mode) = {
+                        let g = handle_thread
+                            .state::<HotkeyState>()
+                            .0
+                            .lock()
+                            .expect("热键状态锁获取失败");
+                        (*g.0, g.1)
+                    };
+                    if event.id != current_hotkey.id() {
                         continue;
                     }
                     let holder = handle_thread.state::<AudioHolder>();
                     let state = handle_thread.state::<RecordingState>();
                     match event.state {
-                        HotKeyState::Pressed => match mode {
+                        HotKeyState::Pressed => match current_mode {
                             TriggerMode::Hold => {
                                 start_recording(&handle_thread, &holder, &state);
                             }
@@ -249,7 +337,7 @@ fn main() {
                             }
                         },
                         HotKeyState::Released => {
-                            if mode == TriggerMode::Hold {
+                            if current_mode == TriggerMode::Hold {
                                 stop_and_transcribe(&handle_thread, &holder, &state);
                             }
                         }
@@ -259,7 +347,7 @@ fn main() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![import_hotwords, export_hotwords])
+        .invoke_handler(tauri::generate_handler![import_hotwords, export_hotwords, get_settings, save_settings])
         .on_window_event(|window, event| {
             // 关闭窗口=隐藏到托盘，不退出应用
             if let WindowEvent::CloseRequested { api, .. } = event {
