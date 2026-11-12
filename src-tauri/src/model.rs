@@ -30,7 +30,7 @@ fn model_url(name: &str) -> String {
 }
 
 /// 确保模型存在；缺失时下载并向前端广播进度。
-pub fn ensure_model(app: &AppHandle, path: &PathBuf) -> Result<(), String> {
+pub fn ensure_model(app: &AppHandle, path: &std::path::Path) -> Result<(), String> {
     if path.exists() {
         return Ok(());
     }
@@ -83,3 +83,4 @@ pub fn ensure_model(app: &AppHandle, path: &PathBuf) -> Result<(), String> {
     );
     Ok(())
 }
+

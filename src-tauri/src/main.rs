@@ -3,7 +3,7 @@ mod config;
 mod model;
 mod transcribe;
 
-use audio::AudioRecorder;
+use audio::AudioHandle;
 use config::{HotkeyConfig, TriggerMode};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use global_hotkey::hotkey::HotKey;
@@ -18,14 +18,13 @@ use tauri::{
 /// 记录 toggle 模式下的当前状态（true = 正在录音）。
 struct RecordingState(AtomicBool);
 
-/// 录音器持有者，供热键线程访问。
-struct RecorderHolder {
-    recorder: Mutex<AudioRecorder>,
+/// 音频服务持有者，供热键线程访问。
+struct AudioHolder {
+    audio: AudioHandle,
 }
 
-fn start_recording(handle: &AppHandle, holder: &RecorderHolder) {
-    let mut rec = holder.recorder.lock().unwrap();
-    match rec.start() {
+fn start_recording(handle: &AppHandle, holder: &AudioHolder) {
+    match holder.audio.start() {
         Ok(()) => {
             let _ = handle.emit("recording-started", ());
         }
@@ -35,15 +34,12 @@ fn start_recording(handle: &AppHandle, holder: &RecorderHolder) {
     }
 }
 
-fn stop_and_transcribe(handle: &AppHandle, holder: &RecorderHolder) {
-    let samples = {
-        let mut rec = holder.recorder.lock().unwrap();
-        match rec.stop() {
-            Ok(s) => s,
-            Err(e) => {
-                let _ = handle.emit("app-error", serde_json::json!({ "message": e }));
-                return;
-            }
+fn stop_and_transcribe(handle: &AppHandle, holder: &AudioHolder) {
+    let samples = match holder.audio.stop() {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = handle.emit("app-error", serde_json::json!({ "message": e }));
+            return;
         }
     };
     let _ = handle.emit("recording-stopped", ());
@@ -83,8 +79,8 @@ fn main() {
             std::mem::forget(manager);
 
             // ---- 共享状态 ----
-            app.manage(RecorderHolder {
-                recorder: Mutex::new(AudioRecorder::new()),
+            app.manage(AudioHolder {
+                audio: AudioHandle::spawn(),
             });
             app.manage(RecordingState(AtomicBool::new(false)));
 
@@ -123,7 +119,7 @@ fn main() {
                     if event.id != hotkey_thread.id() {
                         continue;
                     }
-                    let holder = handle_thread.state::<RecorderHolder>();
+                    let holder = handle_thread.state::<AudioHolder>();
                     let state = handle_thread.state::<RecordingState>();
                     match event.state {
                         HotKeyState::Pressed => match mode {
@@ -153,4 +149,5 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("typelessfree 启动失败");
 }
+
 
