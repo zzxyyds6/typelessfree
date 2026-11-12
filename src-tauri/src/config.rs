@@ -1,4 +1,4 @@
-//! 应用配置：快捷键与触发模式。
+//! 应用配置：快捷键、触发模式、模型与语言。
 //! 配置文件位于系统配置目录（如 Windows: %APPDATA%/typelessfree/config.json），
 //! 不存在或字段缺失时使用默认值。设置界面（F8）后续会负责写入此文件。
 
@@ -12,6 +12,10 @@ struct ConfigFile {
     hotkey_key: Option<String>,
     /// "hold" = 按住说话，"toggle" = 按一次开始/再按结束
     mode: Option<String>,
+    /// 模型名（tiny/base/small/medium/large-v3-turbo）或模型文件绝对路径
+    model: Option<String>,
+    /// "auto" = 自动检测，或 "zh" / "en" 等语言代码
+    language: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,14 +37,19 @@ pub struct HotkeyConfig {
     pub modifiers: global_hotkey::hotkey::Modifiers,
     pub code: global_hotkey::hotkey::Code,
     pub mode: TriggerMode,
+    pub model: String,
+    pub language: String,
 }
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
-            modifiers: global_hotkey::hotkey::Modifiers::CONTROL | global_hotkey::hotkey::Modifiers::SHIFT,
+            modifiers: global_hotkey::hotkey::Modifiers::CONTROL
+                | global_hotkey::hotkey::Modifiers::SHIFT,
             code: global_hotkey::hotkey::Code::Space,
             mode: TriggerMode::Hold,
+            model: "base".to_string(),
+            language: "auto".to_string(),
         }
     }
 }
@@ -107,6 +116,11 @@ pub fn load(app: &tauri::AppHandle) -> HotkeyConfig {
             _ => TriggerMode::Hold,
         };
     }
+    if let Some(m) = file.model {
+        cfg.model = m;
+    }
+    if let Some(l) = file.language {
+        cfg.language = l;
+    }
     cfg
 }
-
