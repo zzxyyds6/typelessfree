@@ -1,9 +1,12 @@
-//! 应用配置：快捷键、触发模式、模型与语言。
+//! 应用配置：快捷键、触发模式、模型、语言与 AI 清理。
 //! 配置文件位于系统配置目录（如 Windows: %APPDATA%/typelessfree/config.json），
 //! 不存在或字段缺失时使用默认值。设置界面（F8）后续会负责写入此文件。
 
 use serde::Deserialize;
 use tauri::Manager;
+
+/// 默认清理提示词（中文口语 → 干净书面文字）。
+pub const DEFAULT_CLEANUP_PROMPT: &str = "你是语音转文字的编辑助手。请把用户发来的语音识别文本整理成通顺自然的书面文字：去除语气填充词（嗯、啊、就是、那个等）、口误和自我修正的重复内容，补上合适的标点，必要时整理成列表。只输出整理后的文字，不要任何解释。保持原意和原文语言。";
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +19,33 @@ struct ConfigFile {
     model: Option<String>,
     /// "auto" = 自动检测，或 "zh" / "en" 等语言代码
     language: Option<String>,
+    cleanup: Option<CleanupConfig>,
+}
+
+/// AI 清理配置。默认关闭：关闭时文本绝不出本机。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// OpenAI 兼容 chat/completions 端点（Ollama 本地或其他自建服务）
+    pub endpoint: Option<String>,
+    pub model: Option<String>,
+    /// 云端 API 时填写；Ollama 本地可留空
+    pub api_key: Option<String>,
+    pub prompt: Option<String>,
+}
+
+impl Default for CleanupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: Some("http://localhost:11434/v1/chat/completions".to_string()),
+            model: Some("llama3.2".to_string()),
+            api_key: Some(String::new()),
+            prompt: Some(DEFAULT_CLEANUP_PROMPT.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +69,7 @@ pub struct HotkeyConfig {
     pub mode: TriggerMode,
     pub model: String,
     pub language: String,
+    pub cleanup: CleanupConfig,
 }
 
 impl Default for HotkeyConfig {
@@ -50,6 +81,7 @@ impl Default for HotkeyConfig {
             mode: TriggerMode::Hold,
             model: "base".to_string(),
             language: "auto".to_string(),
+            cleanup: CleanupConfig::default(),
         }
     }
 }
@@ -121,6 +153,21 @@ pub fn load(app: &tauri::AppHandle) -> HotkeyConfig {
     }
     if let Some(l) = file.language {
         cfg.language = l;
+    }
+    if let Some(c) = file.cleanup {
+        cfg.cleanup.enabled = c.enabled;
+        if let Some(e) = c.endpoint {
+            cfg.cleanup.endpoint = Some(e);
+        }
+        if let Some(m) = c.model {
+            cfg.cleanup.model = Some(m);
+        }
+        if let Some(k) = c.api_key {
+            cfg.cleanup.api_key = Some(k);
+        }
+        if let Some(p) = c.prompt {
+            cfg.cleanup.prompt = Some(p);
+        }
     }
     cfg
 }

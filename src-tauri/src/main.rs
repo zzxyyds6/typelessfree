@@ -1,4 +1,5 @@
 mod audio;
+mod cleanup;
 mod config;
 mod insert;
 mod model;
@@ -113,6 +114,15 @@ fn stop_and_transcribe(handle: &AppHandle, holder: &AudioHolder, state: &Recordi
         let model_path = model::resolve_model_path(&handle, &cfg.model);
         match transcribe::transcribe(&handle, &samples, &cfg.language, &model_path) {
             Ok(text) => {
+                // 可选 AI 清理（默认关闭；关闭时文本不出本机）
+                let text = if text.is_empty() {
+                    text
+                } else {
+                    match cleanup::clean_text(&handle, &text, &cfg) {
+                        Some(t) => t,
+                        None => text,
+                    }
+                };
                 // 识别完成后自动插入光标位置；插入失败不影响结果展示
                 if !text.is_empty() {
                     if let Err(e) = insert::insert_text(&text) {
