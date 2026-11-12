@@ -44,6 +44,9 @@ jobs:
 
       - name: 构建安装包
         run: pnpm tauri build
+        env:
+          # whisper.cpp 的 std::filesystem API 需要 macOS 10.15+
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2
