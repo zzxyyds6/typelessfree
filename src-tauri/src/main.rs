@@ -27,7 +27,11 @@ struct AudioHolder {
 }
 
 /// 全局热键管理器与当前热键（保存设置时支持运行时重注册）。
+/// Windows 平台的 GlobalHotKeyManager 内含 HWND 裸指针（非自动 Send/Sync），
+/// 实际通过 Mutex 串行化访问，且 Tauri 同步命令在主线程执行，跨线程使用是安全的。
 struct HotkeyHolder(std::sync::Mutex<(GlobalHotKeyManager, HotKey)>);
+unsafe impl Send for HotkeyHolder {}
+unsafe impl Sync for HotkeyHolder {}
 
 /// 事件线程读取的当前热键与触发模式（与 HotkeyHolder 保持一致）。
 struct HotkeyState(std::sync::Mutex<(HotKey, TriggerMode)>);
