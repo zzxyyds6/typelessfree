@@ -1,5 +1,6 @@
 mod audio;
 mod config;
+mod insert;
 mod model;
 mod transcribe;
 
@@ -112,6 +113,12 @@ fn stop_and_transcribe(handle: &AppHandle, holder: &AudioHolder, state: &Recordi
         let model_path = model::resolve_model_path(&handle, &cfg.model);
         match transcribe::transcribe(&handle, &samples, &cfg.language, &model_path) {
             Ok(text) => {
+                // 识别完成后自动插入光标位置；插入失败不影响结果展示
+                if !text.is_empty() {
+                    if let Err(e) = insert::insert_text(&text) {
+                        let _ = handle.emit("app-error", serde_json::json!({ "message": e }));
+                    }
+                }
                 let _ = handle.emit("transcription-result", serde_json::json!({ "text": text }));
             }
             Err(e) => {
