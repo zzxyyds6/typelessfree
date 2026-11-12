@@ -9,6 +9,15 @@ use std::sync::{Arc, Mutex};
 enum AudioCmd {
     Start(mpsc::Sender<Result<(), String>>),
     Stop(mpsc::Sender<Result<Vec<f32>, String>>),
+    /// 快照当前录音缓冲（用于实时 partial 识别与音量条），不停止录音。
+    Snapshot(mpsc::Sender<Result<AudioSnapshot, String>>),
+}
+
+/// 录音快照：是否在录音、16kHz 重采样样本、归一化音量（0~1）。
+pub struct AudioSnapshot {
+    pub recording: bool,
+    pub samples: Vec<f32>,
+    pub level: f32,
 }
 
 /// 音频服务句柄：可在任意线程调用（内部命令走通道）。
@@ -28,6 +37,9 @@ impl AudioHandle {
                     }
                     AudioCmd::Stop(reply) => {
                         let _ = reply.send(recorder.stop());
+                    }
+                    AudioCmd::Snapshot(reply) => {
+                        let _ = reply.send(recorder.snapshot());
                     }
                 }
             }
@@ -56,6 +68,19 @@ impl AudioHandle {
             .lock()
             .unwrap()
             .send(AudioCmd::Stop(reply_tx))
+            .map_err(|_| "音频服务已停止".to_string())?;
+        reply_rx
+            .recv()
+            .map_err(|_| "音频服务无响应".to_string())?
+    }
+
+    /// 获取当前录音快照（不中断录音）。
+    pub fn snapshot(&self) -> Result<AudioSnapshot, String> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.tx
+            .lock()
+            .unwrap()
+            .send(AudioCmd::Snapshot(reply_tx))
             .map_err(|_| "音频服务已停止".to_string())?;
         reply_rx
             .recv()
@@ -141,7 +166,34 @@ impl AudioRecorder {
         let stream = self.stream.take().ok_or_else(|| "当前未在录音".to_string())?;
         drop(stream); // 关闭音频流
         let buf = self.buffer.lock().unwrap().clone();
+        self.buffer.lock().unwrap().clear();
         Ok(crate::transcribe::resample_to_16k(&buf, self.sample_rate))
+    }
+
+    fn snapshot(&self) -> Result<AudioSnapshot, String> {
+        if self.stream.is_none() {
+            return Ok(AudioSnapshot {
+                recording: false,
+                samples: Vec::new(),
+                level: 0.0,
+            });
+        }
+        let buf = self.buffer.lock().unwrap().clone();
+        let samples = crate::transcribe::resample_to_16k(&buf, self.sample_rate);
+
+        // 计算 RMS 音量并做增益与截断，方便前端显示音量条
+        let rms = if samples.is_empty() {
+            0.0
+        } else {
+            (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt()
+        };
+        let level = (rms * 6.0).clamp(0.0, 1.0);
+
+        Ok(AudioSnapshot {
+            recording: true,
+            samples,
+            level,
+        })
     }
 }
 

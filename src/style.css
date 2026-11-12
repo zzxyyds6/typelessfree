@@ -1,0 +1,67 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: transparent;
+}
+
+/* ---------- 浮动预览卡 ---------- */
+.preview-card {
+  background: rgba(24, 24, 27, 0.92);
+  color: #e4e4e7;
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.mic-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.level-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.level-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+  transition: width 0.12s linear;
+}
+
+.partial {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #a1a1aa;
+  word-break: break-word;
+}
+
+/* ---------- 主窗口 ---------- */
+body:not(:has(.preview-card)) {
+  padding: 16px;
+}
+
+pre { font-size: 13px; line-height: 1.6; }
