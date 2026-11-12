@@ -30,30 +30,30 @@ impl TriggerMode {
 }
 
 pub struct HotkeyConfig {
-    pub modifiers: global_hotkey::Modifiers,
-    pub code: global_hotkey::Code,
+    pub modifiers: global_hotkey::hotkey::Modifiers,
+    pub code: global_hotkey::hotkey::Code,
     pub mode: TriggerMode,
 }
 
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
-            modifiers: global_hotkey::Modifiers::CONTROL | global_hotkey::Modifiers::SHIFT,
-            code: global_hotkey::Code::Space,
+            modifiers: global_hotkey::hotkey::Modifiers::CONTROL | global_hotkey::hotkey::Modifiers::SHIFT,
+            code: global_hotkey::hotkey::Code::Space,
             mode: TriggerMode::Hold,
         }
     }
 }
 
 /// 解析修饰键字符串，如 "control+shift"、"alt+super"。
-fn parse_modifiers(s: &str) -> Option<global_hotkey::Modifiers> {
-    let mut mods = global_hotkey::Modifiers::empty();
+fn parse_modifiers(s: &str) -> Option<global_hotkey::hotkey::Modifiers> {
+    let mut mods = global_hotkey::hotkey::Modifiers::empty();
     for part in s.split('+') {
         let m = match part.trim().to_ascii_lowercase().as_str() {
-            "control" | "ctrl" => global_hotkey::Modifiers::CONTROL,
-            "shift" => global_hotkey::Modifiers::SHIFT,
-            "alt" => global_hotkey::Modifiers::ALT,
-            "super" | "meta" | "win" | "cmd" => global_hotkey::Modifiers::META,
+            "control" | "ctrl" => global_hotkey::hotkey::Modifiers::CONTROL,
+            "shift" => global_hotkey::hotkey::Modifiers::SHIFT,
+            "alt" => global_hotkey::hotkey::Modifiers::ALT,
+            "super" | "meta" | "win" | "cmd" => global_hotkey::hotkey::Modifiers::META,
             _ => return None,
         };
         mods |= m;
@@ -62,8 +62,8 @@ fn parse_modifiers(s: &str) -> Option<global_hotkey::Modifiers> {
 }
 
 /// 解析主键。MVP 支持常用键，后续在设置界面扩展。
-fn parse_key(s: &str) -> Option<global_hotkey::Code> {
-    use global_hotkey::Code;
+fn parse_key(s: &str) -> Option<global_hotkey::hotkey::Code> {
+    use global_hotkey::hotkey::Code;
     let k = s.trim().to_ascii_lowercase();
     Some(match k.as_str() {
         "space" => Code::Space,
@@ -109,3 +109,4 @@ pub fn load(app: &tauri::AppHandle) -> HotkeyConfig {
     }
     cfg
 }
+

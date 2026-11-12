@@ -1,9 +1,8 @@
 mod config;
 
 use config::{HotkeyConfig, TriggerMode};
-use global_hotkey::{
-    GlobalHotKeyEvent, GlobalHotKeyManager, HotKey, HotKeyState,
-};
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
+use global_hotkey::hotkey::HotKey;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -65,7 +64,7 @@ fn main() {
             let hotkey_thread = hotkey;
             std::thread::spawn(move || {
                 for event in GlobalHotKeyEvent::receiver() {
-                    if event.hotkey != hotkey_thread {
+                    if event.id != hotkey_thread.id() {
                         continue;
                     }
                     let should_emit = match event.state {
@@ -100,3 +99,4 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("typelessfree 启动失败");
 }
+
