@@ -32,11 +32,6 @@ if (location.hash === "#preview") {
     levelBar.style.width = `${Math.round(level * 100)}%`;
   });
 
-  listen("language-detected", (e) => {
-    const { code } = e.payload as { code: string };
-    title.textContent = `正在聆听…（${code.toUpperCase()}）`;
-  });
-
   listen("partial-result", (e) => {
     const { text } = e.payload as TextPayload;
     if (text) {
@@ -75,11 +70,6 @@ if (location.hash === "#preview") {
 
   listen("recording-started", () => setStatus("● 正在录音…", true));
   listen("recording-stopped", () => setStatus("识别中…", false));
-  listen("language-detected", (e) => {
-    const { code } = e.payload as { code: string };
-    title.textContent = `正在聆听…（${code.toUpperCase()}）`;
-  });
-
   listen("partial-result", (e) => {
     const { text } = e.payload as TextPayload;
     if (text) resultEl.textContent = text;
