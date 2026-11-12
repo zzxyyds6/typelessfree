@@ -312,11 +312,8 @@ fn main() {
             std::thread::spawn(move || {
                 for event in GlobalHotKeyEvent::receiver() {
                     let (current_hotkey, current_mode) = {
-                        let g = handle_thread
-                            .state::<HotkeyState>()
-                            .0
-                            .lock()
-                            .expect("热键状态锁获取失败");
+                        let st = handle_thread.state::<HotkeyState>();
+                        let g = st.0.lock().expect("热键状态锁获取失败");
                         (g.0.clone(), g.1)
                     };
                     if event.id != current_hotkey.id() {
